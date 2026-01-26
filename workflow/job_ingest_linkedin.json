@@ -1,0 +1,168 @@
+{
+  "name": "Job Ingest - LinkedIn (via job-fetcher)",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "job-ingest",
+      "parameters": {
+        "path": "job/ingest",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "normalizeUrl",
+      "name": "Normalize URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "parameters": {
+        "jsCode": "// Normalize LinkedIn job URL\nconst rawUrl = $json.body?.jobUrl || $json.jobUrl || '';\n\nif (!rawUrl || typeof rawUrl !== 'string') {\n  throw new Error('Missing or invalid jobUrl in request body');\n}\n\n// Parse URL\nlet url;\ntry {\n  const urlStr = rawUrl.trim();\n  url = new URL(urlStr.startsWith('http') ? urlStr : `https://${urlStr}`);\n} catch (e) {\n  throw new Error('Invalid URL format');\n}\n\n// Validate LinkedIn domain\nconst hostname = url.hostname.toLowerCase();\nif (!hostname.includes('linkedin.com')) {\n  throw new Error('URL must be a LinkedIn job URL');\n}\n\n// Extract job ID\nconst pathMatch = url.pathname.match(/\\/jobs\\/view\\/(\\d+)/);\nif (!pathMatch || !pathMatch[1]) {\n  throw new Error('Could not extract job ID from URL. Expected format: linkedin.com/jobs/view/<jobId>');\n}\n\nconst jobId = pathMatch[1];\nconst jobUrl = `https://www.linkedin.com/jobs/view/${jobId}/`;\n\nreturn [{\n  json: {\n    jobUrl,\n    jobId\n  }\n}];"
+      }
+    },
+    {
+      "id": "callJobFetcher",
+      "name": "Call job-fetcher",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "http://job-fetcher:3000/fetch",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"{{ $json.jobUrl }}\",\n  \"options\": { \"timeoutMs\": 45000 }\n}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "checkSuccess",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 0],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "successPayload",
+      "name": "Success Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, -100],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"source\": \"linkedin\",\n  \"blocked\": false,\n  \"jobId\": \"{{ $json.jobId }}\",\n  \"jobUrl\": \"{{ $json.canonicalUrl }}\",\n  \"title\": {{ JSON.stringify($json.title || '') }},\n  \"company\": {{ JSON.stringify($json.company || '') }},\n  \"location\": {{ JSON.stringify($json.location || '') }},\n  \"descriptionText\": {{ JSON.stringify($json.descriptionText || '') }},\n  \"applyUrl\": {{ JSON.stringify($json.applyUrl || null) }}\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "blockedPayload",
+      "name": "Blocked Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, 100],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"source\": \"linkedin\",\n  \"blocked\": true,\n  \"jobId\": \"{{ $json.jobId }}\",\n  \"jobUrl\": \"{{ $json.canonicalUrl }}\",\n  \"reason\": \"{{ $json.reason || 'UNKNOWN' }}\",\n  \"applyUrl\": {{ JSON.stringify($json.applyUrl || null) }},\n  \"nextStep\": \"Open the posting, click Apply, and send me the external ATS link OR paste the job description text.\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "respondSuccess",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, -100],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "respondBlocked",
+      "name": "Respond Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 100],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Normalize URL", "type": "main", "index": 0}]]
+    },
+    "Normalize URL": {
+      "main": [[{"node": "Call job-fetcher", "type": "main", "index": 0}]]
+    },
+    "Call job-fetcher": {
+      "main": [[{"node": "Success?", "type": "main", "index": 0}]]
+    },
+    "Success?": {
+      "main": [
+        [{"node": "Success Payload", "type": "main", "index": 0}],
+        [{"node": "Blocked Payload", "type": "main", "index": 0}]
+      ]
+    },
+    "Success Payload": {
+      "main": [[{"node": "Respond Success", "type": "main", "index": 0}]]
+    },
+    "Blocked Payload": {
+      "main": [[{"node": "Respond Blocked", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

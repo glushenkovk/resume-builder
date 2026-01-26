@@ -1,0 +1,1043 @@
+{
+  "name": "Resume Enhancer from LinkedIn Job URL",
+  "nodes": [
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [100, 300],
+      "parameters": {}
+    },
+    {
+      "id": "user-input",
+      "name": "User Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [300, 300],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"job_url\": \"https://www.linkedin.com/jobs/view/123456789\",\n  \"jd_text\": \"\",\n  \"resume_path\": \"/data/input/resume.pdf\",\n  \"language\": \"en\",\n  \"tone\": \"professional\",\n  \"pages\": 1,\n  \"scrape_enabled\": false,\n  \"company_override\": \"\",\n  \"role_override\": \"\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "validate-manual-input",
+      "name": "Validate Manual Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Validate manual input from User Input node\nconst item = $input.first();\nconst errors = [];\n\nconst data = {\n  request_id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,\n  job_url: (item.json.job_url || '').trim(),\n  jd_text: (item.json.jd_text || '').trim(),\n  resume_path: (item.json.resume_path || '').trim(),\n  language: item.json.language || 'en',\n  tone: item.json.tone || 'professional',\n  pages: parseInt(item.json.pages) || 1,\n  scrape_enabled: item.json.scrape_enabled === true,\n  company_override: (item.json.company_override || '').trim(),\n  role_override: (item.json.role_override || '').trim(),\n  timestamp: new Date().toISOString()\n};\n\n// Check if we have jd_text (manual JD provided)\nconst hasManualJD = data.jd_text.length >= 50;\n\n// Validate job_url (required if no manual JD)\nif (!hasManualJD) {\n  if (!data.job_url) {\n    errors.push('job_url is required when jd_text is not provided');\n  } else if (!data.job_url.includes('linkedin.com/jobs')) {\n    errors.push('job_url must be a LinkedIn job URL (e.g., https://www.linkedin.com/jobs/view/...)');\n  }\n}\n\n// Validate resume_path\nif (!data.resume_path) {\n  errors.push('resume_path is required (path to your resume PDF)');\n}\n\n// Validate language\nconst validLanguages = ['en', 'ru', 'de', 'fr', 'es', 'pt', 'it', 'zh', 'ja', 'ko'];\nif (!validLanguages.includes(data.language)) {\n  data.language = 'en';\n}\n\n// Validate tone\nconst validTones = ['professional', 'casual', 'creative', 'technical', 'executive'];\nif (!validTones.includes(data.tone)) {\n  data.tone = 'professional';\n}\n\n// Validate pages\nif (data.pages < 1 || data.pages > 3) {\n  data.pages = 1;\n}\n\nif (errors.length > 0) {\n  return [{\n    json: {\n      success: false,\n      validation_passed: false,\n      errors: errors,\n      request_id: data.request_id,\n      message: 'Validation failed. Please fix the errors in the User Input node and re-run.'\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...data,\n    has_manual_jd: hasManualJD,\n    validation_passed: true\n  }\n}];"
+      }
+    },
+    {
+      "id": "check-validation",
+      "name": "Check Validation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validation-check",
+              "leftValue": "={{ $json.validation_passed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "summary-validation-error",
+      "name": "Summary - Validation Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 450],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Return validation error summary\nconst data = $input.first().json;\n\nreturn [{\n  json: {\n    success: false,\n    request_id: data.request_id,\n    company: null,\n    role: null,\n    need_jd_text: false,\n    output_path: null,\n    files: [],\n    errors: data.errors || ['Unknown validation error']\n  }\n}];"
+      }
+    },
+    {
+      "id": "read-resume-file",
+      "name": "Read Resume File",
+      "type": "n8n-nodes-base.readBinaryFiles",
+      "typeVersion": 1,
+      "position": [900, 200],
+      "parameters": {
+        "fileSelector": "={{ $json.resume_path }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "extract-resume-text",
+      "name": "Extract Resume Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [1100, 200],
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "check-resume-extracted",
+      "name": "Check Resume Extracted",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 200],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Check if we got resume text\nconst item = $input.first();\nconst prevData = $('Validate Manual Input').first().json;\n\nlet resumeText = '';\nlet extractionError = null;\n\ntry {\n  // Check for extraction errors\n  if (item.json.error) {\n    extractionError = item.json.error;\n  } else {\n    resumeText = item.json.data || item.json.text || '';\n  }\n} catch (e) {\n  extractionError = e.message;\n}\n\nif (!resumeText && extractionError) {\n  return [{\n    json: {\n      success: false,\n      validation_passed: false,\n      request_id: prevData.request_id,\n      errors: [`Failed to extract text from resume: ${extractionError}`],\n      resume_extraction_failed: true\n    }\n  }];\n}\n\nif (resumeText.length < 50) {\n  return [{\n    json: {\n      success: false,\n      validation_passed: false,\n      request_id: prevData.request_id,\n      errors: ['Resume text too short. Please check the PDF file or provide a text version.'],\n      resume_extraction_failed: true\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...prevData,\n    resume_text: resumeText,\n    resume_text_length: resumeText.length,\n    validation_passed: true\n  }\n}];"
+      }
+    },
+    {
+      "id": "check-resume-valid",
+      "name": "Check Resume Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 200],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "resume-check",
+              "leftValue": "={{ $json.validation_passed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "summary-resume-error",
+      "name": "Summary - Resume Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 350],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Return resume extraction error summary\nconst data = $input.first().json;\n\nreturn [{\n  json: {\n    success: false,\n    request_id: data.request_id,\n    company: null,\n    role: null,\n    need_jd_text: false,\n    output_path: null,\n    files: [],\n    errors: data.errors || ['Failed to read resume file']\n  }\n}];"
+      }
+    },
+    {
+      "id": "check-jd-source",
+      "name": "Check JD Source",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1700, 150],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-manual-jd",
+              "leftValue": "={{ $json.has_manual_jd }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "use-manual-jd",
+      "name": "Use Manual JD",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1900, 100],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Use the manually provided JD text\nconst data = $input.first().json;\n\nreturn [{\n  json: {\n    ...data,\n    job_description: data.jd_text,\n    jd_source: 'manual',\n    scrape_success: true,\n    need_manual_jd: false\n  }\n}];"
+      }
+    },
+    {
+      "id": "check-scrape-enabled",
+      "name": "Check Scrape Enabled",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1900, 250],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "scrape-enabled",
+              "leftValue": "={{ $json.scrape_enabled }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "scrape-job-description",
+      "name": "Scrape Job Description",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2100, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BROWSERLESS_URL || 'http://localhost:3001' }}/content",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"{{ $json.job_url }}\",\n  \"waitForSelector\": \".description__text\",\n  \"waitForTimeout\": 5000\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "check-scrape-result",
+      "name": "Check Scrape Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2300, 200],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Check if scraping was successful\nconst item = $input.first();\nconst prevData = $('Check JD Source').first().json;\n\nlet scrapeSuccess = false;\nlet jobDescription = '';\nlet scrapeError = null;\n\ntry {\n  if (item.json.error || !item.json.data) {\n    scrapeError = item.json.error || 'No data returned from scraper';\n  } else {\n    const html = item.json.data || '';\n    \n    // Try multiple patterns to extract job description\n    const patterns = [\n      /class=[\"']description[^>]*>([\\s\\S]*?)<\\/div>/i,\n      /class=[\"']job-description[^>]*>([\\s\\S]*?)<\\/div>/i,\n      /<article[^>]*>([\\s\\S]*?)<\\/article>/i\n    ];\n    \n    for (const pattern of patterns) {\n      const match = html.match(pattern);\n      if (match) {\n        jobDescription = match[1]\n          .replace(/<[^>]+>/g, ' ')\n          .replace(/\\s+/g, ' ')\n          .trim();\n        if (jobDescription.length > 50) {\n          scrapeSuccess = true;\n          break;\n        }\n      }\n    }\n    \n    if (!scrapeSuccess) {\n      scrapeError = 'Could not extract job description from page';\n    }\n  }\n} catch (e) {\n  scrapeError = e.message;\n}\n\nreturn [{\n  json: {\n    ...prevData,\n    job_description: jobDescription,\n    jd_source: scrapeSuccess ? 'scraped' : 'none',\n    scrape_success: scrapeSuccess,\n    scrape_error: scrapeError,\n    need_manual_jd: !scrapeSuccess\n  }\n}];"
+      }
+    },
+    {
+      "id": "summary-need-jd",
+      "name": "Summary - Need JD",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2100, 350],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Return summary indicating manual JD is needed\nconst data = $input.first().json;\n\nreturn [{\n  json: {\n    success: false,\n    request_id: data.request_id,\n    company: data.company_override || null,\n    role: data.role_override || null,\n    need_jd_text: true,\n    output_path: null,\n    files: [],\n    errors: [\n      'Job description not available.',\n      'Please paste the job description text into the jd_text field in User Input node and re-run.',\n      'Alternatively, enable scrape_enabled=true if you have a browserless instance.'\n    ],\n    hint: 'Copy the job description from LinkedIn and paste it into the jd_text field.'\n  }\n}];"
+      }
+    },
+    {
+      "id": "check-need-manual-jd",
+      "name": "Check Need Manual JD",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2500, 200],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "need-jd-check",
+              "leftValue": "={{ $json.need_manual_jd }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "summary-scrape-failed",
+      "name": "Summary - Scrape Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2700, 350],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Return summary indicating scraping failed\nconst data = $input.first().json;\n\nreturn [{\n  json: {\n    success: false,\n    request_id: data.request_id,\n    company: data.company_override || null,\n    role: data.role_override || null,\n    need_jd_text: true,\n    output_path: null,\n    files: [],\n    errors: [\n      `Scraping failed: ${data.scrape_error || 'Unknown error'}`,\n      'Please paste the job description text into the jd_text field in User Input node and re-run.'\n    ]\n  }\n}];"
+      }
+    },
+    {
+      "id": "merge-jd-paths",
+      "name": "Merge JD Paths",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2700, 100],
+      "parameters": {
+        "mode": "chooseBranch",
+        "output": "empty",
+        "options": {}
+      }
+    },
+    {
+      "id": "parse-resume-openai",
+      "name": "Parse Resume - OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [2900, 100],
+      "parameters": {
+        "resource": "text",
+        "operation": "response",
+        "modelId": {
+          "mode": "id",
+          "value": "={{ $env.OPENAI_MODEL || 'gpt-4o' }}"
+        },
+        "responses": {
+          "values": [
+            {
+              "type": "text",
+              "role": "system",
+              "content": "You are an expert resume parser. Extract structured information from the provided resume text into JSON format. Include: personal (name, email, phone, location, linkedin, github, portfolio), summary, experience (array with title, company, location, startDate, endDate, current, description, achievements), education (array with degree, field, institution, location, graduationDate, gpa, honors), skills (technical, soft, languages, tools, certifications), projects, awards, publications, volunteer. Only extract information that is explicitly present. Do NOT invent any data."
+            },
+            {
+              "type": "text",
+              "role": "user",
+              "content": "=Parse this resume and return ONLY valid JSON:\n\n{{ $json.resume_text }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 4096,
+          "textFormat": {
+            "textOptions": [
+              {
+                "type": "json_object"
+              }
+            ]
+          }
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "analyze-job-openai",
+      "name": "Analyze Job - OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [3100, 100],
+      "parameters": {
+        "resource": "text",
+        "operation": "response",
+        "modelId": {
+          "mode": "id",
+          "value": "={{ $env.OPENAI_MODEL || 'gpt-4o' }}"
+        },
+        "responses": {
+          "values": [
+            {
+              "type": "text",
+              "role": "system",
+              "content": "You are an expert job requirements analyst. Analyze the job description and extract: job (title, company, location, type, level, salary), requirements (mustHave array with skill, category, yearsRequired, importance; niceToHave array), keywords (technical, industry, action_verbs, ats_critical), responsibilities, culture (values, workStyle, benefits), applicationTips. Be thorough in identifying both explicit and implicit requirements."
+            },
+            {
+              "type": "text",
+              "role": "user",
+              "content": "=Analyze this job description and return ONLY valid JSON:\n\n{{ $json.job_description }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 4096,
+          "textFormat": {
+            "textOptions": [
+              {
+                "type": "json_object"
+              }
+            ]
+          }
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "combine-analysis",
+      "name": "Combine Analysis Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3300, 100],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Combine parsed resume and job analysis\nconst prevData = $('Merge JD Paths').first().json;\nconst resumeResponse = $('Parse Resume - OpenAI').first().json;\nconst jobResponse = $('Analyze Job - OpenAI').first().json;\n\nlet parsedResume = {};\nlet jobAnalysis = {};\n\n// Native OpenAI node with simplify=true returns content directly\n// It may be in .output, .content, or .message depending on node version\ntry {\n  const resumeContent = resumeResponse.output || resumeResponse.content || resumeResponse.message || resumeResponse;\n  if (typeof resumeContent === 'string') {\n    parsedResume = JSON.parse(resumeContent);\n  } else if (typeof resumeContent === 'object') {\n    parsedResume = resumeContent;\n  }\n} catch (e) {\n  parsedResume = { error: 'Failed to parse resume: ' + e.message, raw: resumeResponse };\n}\n\ntry {\n  const jobContent = jobResponse.output || jobResponse.content || jobResponse.message || jobResponse;\n  if (typeof jobContent === 'string') {\n    jobAnalysis = JSON.parse(jobContent);\n  } else if (typeof jobContent === 'object') {\n    jobAnalysis = jobContent;\n  }\n} catch (e) {\n  jobAnalysis = { error: 'Failed to analyze job: ' + e.message, raw: jobResponse };\n}\n\n// Extract company and role for folder naming (with overrides)\nconst company = prevData.company_override || jobAnalysis.job?.company || 'Unknown_Company';\nconst role = prevData.role_override || jobAnalysis.job?.title || 'Unknown_Role';\nconst sanitize = (str) => str.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50);\n\nconst outputDir = $env.OUTPUT_DIR || '/data/output';\n\nreturn [{\n  json: {\n    request_id: prevData.request_id,\n    language: prevData.language,\n    tone: prevData.tone,\n    pages: prevData.pages,\n    job_url: prevData.job_url,\n    job_description: prevData.job_description,\n    jd_source: prevData.jd_source,\n    resume_text: prevData.resume_text,\n    parsed_resume: parsedResume,\n    job_analysis: jobAnalysis,\n    company: sanitize(company),\n    role: sanitize(role),\n    date: new Date().toISOString().split('T')[0],\n    output_dir: outputDir,\n    output_path: `${outputDir}/JobApplications/${sanitize(company)}/${sanitize(role)}-${new Date().toISOString().split('T')[0]}/${prevData.request_id}`\n  }\n}];"
+      }
+    },
+    {
+      "id": "fit-analysis-openai",
+      "name": "Fit Analysis - OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [3500, 100],
+      "parameters": {
+        "resource": "text",
+        "operation": "response",
+        "modelId": {
+          "mode": "id",
+          "value": "={{ $env.OPENAI_MODEL || 'gpt-4o' }}"
+        },
+        "responses": {
+          "values": [
+            {
+              "type": "text",
+              "role": "system",
+              "content": "You are an expert career advisor. Analyze the match between resume and job requirements. Return JSON with: fitScore (overall, technical, experience, education, soft_skills - all 0-100), coverage (mustHave with matched/missing/partial arrays, niceToHave with matched/missing), keywords (present, missing_critical, recommended_additions), gaps (array with area, severity, suggestion), strengths (array with area, evidence, howToHighlight), improvementPlan (immediate, resume_changes, talking_points). Be realistic and only use actual evidence from the resume."
+            },
+            {
+              "type": "text",
+              "role": "user",
+              "content": "=Analyze fit between this resume and job requirements. Return ONLY valid JSON.\n\nRESUME:\n{{ JSON.stringify($json.parsed_resume) }}\n\nJOB REQUIREMENTS:\n{{ JSON.stringify($json.job_analysis) }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 4096,
+          "textFormat": {
+            "textOptions": [
+              {
+                "type": "json_object"
+              }
+            ]
+          }
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "enhance-resume-openai",
+      "name": "Enhance Resume - OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [3700, 100],
+      "parameters": {
+        "resource": "text",
+        "operation": "response",
+        "modelId": {
+          "mode": "id",
+          "value": "={{ $env.OPENAI_MODEL || 'gpt-4o' }}"
+        },
+        "responses": {
+          "values": [
+            {
+              "type": "text",
+              "role": "system",
+              "content": "=You are an expert ATS-optimized resume writer. Enhance the resume to better match the job while maintaining COMPLETE ACCURACY. CRITICAL RULES: 1) NEVER INVENT information 2) NEVER add fake skills 3) NEVER fabricate experience 4) NEVER create false metrics 5) Only reword/reorganize existing content. Return JSON with: enhanced_resume (same structure as input but optimized), changelog (array with section, original, enhanced, reason). Tone: {{ $json.tone }}. Language: {{ $json.language }}. Max pages: {{ $json.pages }}."
+            },
+            {
+              "type": "text",
+              "role": "user",
+              "content": "=Enhance this resume for the job. Return ONLY valid JSON.\n\nORIGINAL RESUME:\n{{ JSON.stringify($json.parsed_resume) }}\n\nJOB REQUIREMENTS:\n{{ JSON.stringify($json.job_analysis) }}\n\nFIT ANALYSIS:\n{{ JSON.stringify($('Fit Analysis - OpenAI').first().json) }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 4096,
+          "textFormat": {
+            "textOptions": [
+              {
+                "type": "json_object"
+              }
+            ]
+          }
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "generate-artifacts",
+      "name": "Generate All Artifacts",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [3900, 100],
+      "parameters": {
+        "resource": "text",
+        "operation": "response",
+        "modelId": {
+          "mode": "id",
+          "value": "={{ $env.OPENAI_MODEL || 'gpt-4o' }}"
+        },
+        "responses": {
+          "values": [
+            {
+              "type": "text",
+              "role": "system",
+              "content": "=You are an expert career coach. Generate comprehensive job application materials. Return JSON with these keys, each containing markdown content: cover_letter (personalized, 300-400 words), interview_prep (questions, answers using ONLY resume facts), ats_keywords (keyword analysis and placement strategy), gap_analysis (detailed gaps and mitigation), stories_STAR (5-7 STAR stories from ACTUAL experience only), questions_to_recruiter (smart questions to ask), plan_30_60_90 (realistic onboarding plan). CRITICAL: Use ONLY information from the actual resume. NEVER invent achievements or metrics. Language: {{ $json.language }}. Tone: {{ $json.tone }}."
+            },
+            {
+              "type": "text",
+              "role": "user",
+              "content": "=Generate all artifacts. Return ONLY valid JSON.\n\nENHANCED RESUME:\n{{ JSON.stringify($('Enhance Resume - OpenAI').first().json) }}\n\nJOB:\n{{ JSON.stringify($json.job_analysis) }}\n\nFIT:\n{{ JSON.stringify($('Fit Analysis - OpenAI').first().json) }}\n\nCompany: {{ $json.company }}\nRole: {{ $json.role }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "temperature": 0.4,
+          "maxTokens": 8000,
+          "textFormat": {
+            "textOptions": [
+              {
+                "type": "json_object"
+              }
+            ]
+          }
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "quality-check",
+      "name": "Quality Check - OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [4100, 100],
+      "parameters": {
+        "resource": "text",
+        "operation": "response",
+        "modelId": {
+          "mode": "id",
+          "value": "={{ $env.OPENAI_MODEL || 'gpt-4o' }}"
+        },
+        "responses": {
+          "values": [
+            {
+              "type": "text",
+              "role": "system",
+              "content": "You are a strict quality assurance expert. Review all generated content for accuracy. Return JSON with: overallStatus (PASS/FAIL/WARNING), issues (array with severity critical/warning/info, location, issue, original, generated, recommendation), verified (object with boolean for each section), summary, confidence_score (0-1). Flag ANY information not traceable to the original resume. Mark invented metrics as CRITICAL. Mark skill additions as CRITICAL."
+            },
+            {
+              "type": "text",
+              "role": "user",
+              "content": "=Verify accuracy. Return ONLY valid JSON.\n\nORIGINAL RESUME:\n{{ JSON.stringify($json.parsed_resume) }}\n\nENHANCED RESUME:\n{{ JSON.stringify($('Enhance Resume - OpenAI').first().json) }}\n\nGENERATED CONTENT:\n{{ JSON.stringify($('Generate All Artifacts').first().json) }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 4096,
+          "textFormat": {
+            "textOptions": [
+              {
+                "type": "json_object"
+              }
+            ]
+          }
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "prepare-files",
+      "name": "Prepare All Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4300, 100],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Prepare all files for saving\nconst data = $('Combine Analysis Data').first().json;\nconst enhanceResponse = $('Enhance Resume - OpenAI').first().json;\nconst artifactsResponse = $('Generate All Artifacts').first().json;\nconst qualityResponse = $('Quality Check - OpenAI').first().json;\nconst fitResponse = $('Fit Analysis - OpenAI').first().json;\n\nlet enhancedResume = {};\nlet artifacts = {};\nlet qualityCheck = {};\nlet fitAnalysis = {};\n\n// Helper to parse OpenAI response (handles both HTTP and native node formats)\nconst parseOpenAIResponse = (response) => {\n  // Native OpenAI node with simplify=true returns content directly\n  const content = response.output || response.content || response.message || response;\n  if (typeof content === 'string') {\n    return JSON.parse(content);\n  } else if (typeof content === 'object') {\n    return content;\n  }\n  throw new Error('Unexpected response format');\n};\n\ntry {\n  enhancedResume = parseOpenAIResponse(enhanceResponse);\n} catch (e) {\n  enhancedResume = { error: 'Failed to parse enhanced resume: ' + e.message };\n}\n\ntry {\n  artifacts = parseOpenAIResponse(artifactsResponse);\n} catch (e) {\n  artifacts = { error: 'Failed to parse artifacts: ' + e.message };\n}\n\ntry {\n  qualityCheck = parseOpenAIResponse(qualityResponse);\n} catch (e) {\n  qualityCheck = { error: 'Failed to parse quality check: ' + e.message };\n}\n\ntry {\n  fitAnalysis = parseOpenAIResponse(fitResponse);\n} catch (e) {\n  fitAnalysis = { error: 'Failed to parse fit analysis: ' + e.message };\n}\n\n// Generate warnings.md if there are issues\nlet warningsContent = '';\nif (qualityCheck.issues && qualityCheck.issues.length > 0) {\n  warningsContent = '# Quality Check Warnings\\n\\n';\n  qualityCheck.issues.forEach((issue, i) => {\n    warningsContent += `## Issue ${i + 1}: ${issue.severity?.toUpperCase() || 'WARNING'}\\n`;\n    warningsContent += `- **Location:** ${issue.location || 'Unknown'}\\n`;\n    warningsContent += `- **Issue:** ${issue.issue || 'No description'}\\n`;\n    if (issue.recommendation) {\n      warningsContent += `- **Recommendation:** ${issue.recommendation}\\n`;\n    }\n    warningsContent += '\\n';\n  });\n}\n\n// Prepare all files\nconst files = {\n  'cover_letter.md': artifacts.cover_letter || '# Cover Letter\\n\\nContent generation failed.',\n  'interview_prep.md': artifacts.interview_prep || '# Interview Preparation\\n\\nContent generation failed.',\n  'ats_keywords.md': artifacts.ats_keywords || '# ATS Keywords\\n\\nContent generation failed.',\n  'gap_analysis.md': artifacts.gap_analysis || '# Gap Analysis\\n\\nContent generation failed.',\n  'stories_STAR.md': artifacts.stories_STAR || '# STAR Stories\\n\\nContent generation failed.',\n  'questions_to_recruiter.md': artifacts.questions_to_recruiter || '# Questions for Recruiter\\n\\nContent generation failed.',\n  '30-60-90.md': artifacts.plan_30_60_90 || '# 30-60-90 Day Plan\\n\\nContent generation failed.',\n  'changes_changelog.md': `# Resume Changes Changelog\\n\\n${JSON.stringify(enhancedResume.changelog || [], null, 2)}`,\n  'data.json': JSON.stringify({\n    request_id: data.request_id,\n    job_url: data.job_url,\n    jd_source: data.jd_source,\n    company: data.company,\n    role: data.role,\n    date: data.date,\n    fit_score: fitAnalysis.fitScore,\n    quality_status: qualityCheck.overallStatus,\n    parsed_resume: data.parsed_resume,\n    job_analysis: data.job_analysis,\n    fit_analysis: fitAnalysis,\n    enhanced_resume: enhancedResume.enhanced_resume\n  }, null, 2)\n};\n\nif (warningsContent) {\n  files['warnings.md'] = warningsContent;\n}\n\nreturn [{\n  json: {\n    ...data,\n    enhanced_resume: enhancedResume,\n    artifacts: artifacts,\n    quality_check: qualityCheck,\n    fit_analysis: fitAnalysis,\n    files: files\n  }\n}];"
+      }
+    },
+    {
+      "id": "generate-html",
+      "name": "Generate Resume HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4500, 100],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Generate ATS-friendly HTML resume\nconst data = $input.first().json;\nconst resume = data.enhanced_resume?.enhanced_resume || data.parsed_resume;\n\nconst escapeHtml = (str) => {\n  if (!str) return '';\n  return String(str)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;');\n};\n\nconst personal = resume.personal || {};\nconst experience = resume.experience || [];\nconst education = resume.education || [];\nconst skills = resume.skills || {};\n\nlet html = `<!DOCTYPE html>\n<html lang=\"${data.language || 'en'}\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>${escapeHtml(personal.name || 'Resume')}</title>\n  <style>\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      font-family: 'Calibri', 'Arial', sans-serif;\n      font-size: 11pt;\n      line-height: 1.4;\n      color: #333;\n      max-width: 8.5in;\n      margin: 0 auto;\n      padding: 0.5in 0.75in;\n    }\n    h1 { font-size: 18pt; color: #1a1a1a; margin-bottom: 4pt; text-transform: uppercase; letter-spacing: 1px; text-align: center; }\n    h2 { font-size: 12pt; color: #2c5282; border-bottom: 1px solid #2c5282; padding-bottom: 2pt; margin: 12pt 0 6pt 0; text-transform: uppercase; }\n    h3 { font-size: 11pt; font-weight: bold; margin-bottom: 2pt; }\n    .contact { text-align: center; font-size: 10pt; color: #555; margin-bottom: 8pt; }\n    .contact a { color: #2c5282; text-decoration: none; }\n    .summary { margin-bottom: 8pt; }\n    .job, .education-item { margin-bottom: 8pt; }\n    .job-header, .edu-header { display: flex; justify-content: space-between; flex-wrap: wrap; }\n    .job-title { font-weight: bold; }\n    .company { font-style: italic; }\n    .date { color: #666; font-size: 10pt; }\n    ul { margin-left: 16pt; margin-top: 4pt; }\n    li { margin-bottom: 2pt; }\n    .skills { margin-top: 4pt; }\n    .skill-category { margin-bottom: 4pt; }\n    .skill-label { font-weight: bold; }\n    @media print { body { padding: 0; } }\n  </style>\n</head>\n<body>\n  <header>\n    <h1>${escapeHtml(personal.name || '')}</h1>\n    <div class=\"contact\">\n      ${[personal.email, personal.phone, personal.location].filter(Boolean).map(escapeHtml).join(' | ')}\n      ${personal.linkedin ? `<br><a href=\"${escapeHtml(personal.linkedin)}\">LinkedIn</a>` : ''}\n      ${personal.github ? ` | <a href=\"${escapeHtml(personal.github)}\">GitHub</a>` : ''}\n      ${personal.portfolio ? ` | <a href=\"${escapeHtml(personal.portfolio)}\">Portfolio</a>` : ''}\n    </div>\n  </header>`;\n\nif (resume.summary) {\n  html += `\n  <section>\n    <h2>Professional Summary</h2>\n    <p class=\"summary\">${escapeHtml(resume.summary)}</p>\n  </section>`;\n}\n\nif (experience.length > 0) {\n  html += `\n  <section>\n    <h2>Experience</h2>`;\n  experience.forEach(job => {\n    html += `\n    <div class=\"job\">\n      <div class=\"job-header\">\n        <span class=\"job-title\">${escapeHtml(job.title || '')}</span>\n        <span class=\"date\">${escapeHtml(job.startDate || '')} - ${escapeHtml(job.endDate || 'Present')}</span>\n      </div>\n      <div class=\"company\">${escapeHtml(job.company || '')}${job.location ? ', ' + escapeHtml(job.location) : ''}</div>`;\n    if (job.achievements && job.achievements.length > 0) {\n      html += `\n      <ul>`;\n      job.achievements.forEach(a => {\n        html += `\n        <li>${escapeHtml(a)}</li>`;\n      });\n      html += `\n      </ul>`;\n    } else if (job.description) {\n      html += `\n      <p>${escapeHtml(job.description)}</p>`;\n    }\n    html += `\n    </div>`;\n  });\n  html += `\n  </section>`;\n}\n\nif (education.length > 0) {\n  html += `\n  <section>\n    <h2>Education</h2>`;\n  education.forEach(edu => {\n    html += `\n    <div class=\"education-item\">\n      <div class=\"edu-header\">\n        <span><strong>${escapeHtml(edu.degree || '')}</strong>${edu.field ? ' in ' + escapeHtml(edu.field) : ''}</span>\n        <span class=\"date\">${escapeHtml(edu.graduationDate || '')}</span>\n      </div>\n      <div class=\"company\">${escapeHtml(edu.institution || '')}</div>\n    </div>`;\n  });\n  html += `\n  </section>`;\n}\n\nhtml += `\n  <section>\n    <h2>Skills</h2>\n    <div class=\"skills\">`;\nif (skills.technical && skills.technical.length > 0) {\n  html += `\n      <div class=\"skill-category\">\n        <span class=\"skill-label\">Technical:</span> ${skills.technical.map(escapeHtml).join(', ')}\n      </div>`;\n}\nif (skills.tools && skills.tools.length > 0) {\n  html += `\n      <div class=\"skill-category\">\n        <span class=\"skill-label\">Tools:</span> ${skills.tools.map(escapeHtml).join(', ')}\n      </div>`;\n}\nif (skills.soft && skills.soft.length > 0) {\n  html += `\n      <div class=\"skill-category\">\n        <span class=\"skill-label\">Soft Skills:</span> ${skills.soft.map(escapeHtml).join(', ')}\n      </div>`;\n}\nif (skills.languages && skills.languages.length > 0) {\n  html += `\n      <div class=\"skill-category\">\n        <span class=\"skill-label\">Languages:</span> ${skills.languages.map(escapeHtml).join(', ')}\n      </div>`;\n}\nhtml += `\n    </div>\n  </section>\n</body>\n</html>`;\n\nreturn [{\n  json: {\n    ...data,\n    resume_html: html\n  }\n}];"
+      }
+    },
+    {
+      "id": "html-to-pdf",
+      "name": "Convert HTML to PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4700, 100],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GOTENBERG_URL || 'http://localhost:3000' }}/forms/chromium/convert/html",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "index.html",
+              "parameterType": "formData",
+              "inputDataFieldName": "={{ $json.resume_html }}"
+            },
+            {
+              "name": "marginTop",
+              "parameterType": "formData",
+              "inputDataFieldName": "0.5"
+            },
+            {
+              "name": "marginBottom",
+              "parameterType": "formData",
+              "inputDataFieldName": "0.5"
+            },
+            {
+              "name": "marginLeft",
+              "parameterType": "formData",
+              "inputDataFieldName": "0.5"
+            },
+            {
+              "name": "marginRight",
+              "parameterType": "formData",
+              "inputDataFieldName": "0.5"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "write-files",
+      "name": "Write Files to Disk",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4900, 100],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Write all files to disk\nconst prevData = $('Generate Resume HTML').first().json;\nconst pdfResult = $('Convert HTML to PDF').first();\nconst fs = require('fs');\nconst path = require('path');\n\nconst basePath = prevData.output_path;\nconst writtenFiles = [];\nconst errors = [];\n\n// Create output directory\ntry {\n  if (!fs.existsSync(basePath)) {\n    fs.mkdirSync(basePath, { recursive: true });\n  }\n} catch (e) {\n  errors.push(`Failed to create output directory: ${e.message}`);\n}\n\n// Write markdown/json files\nfor (const [filename, content] of Object.entries(prevData.files || {})) {\n  try {\n    const filePath = path.join(basePath, filename);\n    fs.writeFileSync(filePath, content, 'utf8');\n    writtenFiles.push(filename);\n  } catch (e) {\n    errors.push(`Failed to write ${filename}: ${e.message}`);\n  }\n}\n\n// Write HTML file\ntry {\n  const htmlPath = path.join(basePath, 'resume.html');\n  fs.writeFileSync(htmlPath, prevData.resume_html, 'utf8');\n  writtenFiles.push('resume.html');\n} catch (e) {\n  errors.push(`Failed to write resume.html: ${e.message}`);\n}\n\n// Write PDF file from binary\ntry {\n  if (pdfResult.binary && pdfResult.binary.data) {\n    const pdfPath = path.join(basePath, 'improved_resume.pdf');\n    const pdfBuffer = Buffer.from(pdfResult.binary.data.data, 'base64');\n    fs.writeFileSync(pdfPath, pdfBuffer);\n    writtenFiles.push('improved_resume.pdf');\n  } else {\n    errors.push('PDF generation failed or returned no data');\n  }\n} catch (e) {\n  errors.push(`Failed to write PDF: ${e.message}`);\n}\n\nreturn [{\n  json: {\n    request_id: prevData.request_id,\n    output_path: basePath,\n    company: prevData.company,\n    role: prevData.role,\n    fit_score: prevData.fit_analysis?.fitScore?.overall,\n    quality_status: prevData.quality_check?.overallStatus,\n    files_written: writtenFiles,\n    write_errors: errors\n  }\n}];"
+      }
+    },
+    {
+      "id": "summary-success",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5100, 100],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Generate final summary for human viewing\nconst data = $input.first().json;\n\nconst success = data.files_written && data.files_written.length > 0;\nconst errors = data.write_errors || [];\n\nreturn [{\n  json: {\n    success: success && errors.length === 0,\n    request_id: data.request_id,\n    company: data.company,\n    role: data.role,\n    fit_score: data.fit_score,\n    quality_status: data.quality_status,\n    need_jd_text: false,\n    output_path: data.output_path,\n    files: data.files_written || [],\n    errors: errors.length > 0 ? errors : undefined\n  }\n}];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Manual Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Manual Input": {
+      "main": [
+        [
+          {
+            "node": "Check Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation": {
+      "main": [
+        [
+          {
+            "node": "Read Resume File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summary - Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Resume File": {
+      "main": [
+        [
+          {
+            "node": "Extract Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Check Resume Extracted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Resume Extracted": {
+      "main": [
+        [
+          {
+            "node": "Check Resume Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Resume Valid": {
+      "main": [
+        [
+          {
+            "node": "Check JD Source",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summary - Resume Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check JD Source": {
+      "main": [
+        [
+          {
+            "node": "Use Manual JD",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Scrape Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Manual JD": {
+      "main": [
+        [
+          {
+            "node": "Merge JD Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Scrape Enabled": {
+      "main": [
+        [
+          {
+            "node": "Scrape Job Description",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summary - Need JD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Job Description": {
+      "main": [
+        [
+          {
+            "node": "Check Scrape Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Scrape Result": {
+      "main": [
+        [
+          {
+            "node": "Check Need Manual JD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Need Manual JD": {
+      "main": [
+        [
+          {
+            "node": "Summary - Scrape Failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge JD Paths",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge JD Paths": {
+      "main": [
+        [
+          {
+            "node": "Parse Resume - OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Resume - OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Analyze Job - OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Job - OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Combine Analysis Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Analysis Data": {
+      "main": [
+        [
+          {
+            "node": "Fit Analysis - OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fit Analysis - OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Enhance Resume - OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhance Resume - OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Generate All Artifacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate All Artifacts": {
+      "main": [
+        [
+          {
+            "node": "Quality Check - OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quality Check - OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Prepare All Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare All Files": {
+      "main": [
+        [
+          {
+            "node": "Generate Resume HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Resume HTML": {
+      "main": [
+        [
+          {
+            "node": "Convert HTML to PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert HTML to PDF": {
+      "main": [
+        [
+          {
+            "node": "Write Files to Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Files to Disk": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}
