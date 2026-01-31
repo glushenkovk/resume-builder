@@ -1,10 +1,15 @@
 /**
- * LinkedIn Job Fetcher using Playwright
+ * LinkedIn Job Fetcher using Playwright with Stealth
  */
 
-import { chromium, Browser, Page, BrowserContext } from 'playwright';
+import { chromium } from 'playwright-extra';
+import { Browser, Page, BrowserContext } from 'playwright';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { normalizeLinkedInUrl } from './normalizeUrl';
 import { acquireSlot, ConcurrencySlot } from './concurrency';
+
+// Apply stealth plugin to avoid detection
+chromium.use(StealthPlugin());
 
 const DEFAULT_TIMEOUT_MS = parseInt(process.env.DEFAULT_TIMEOUT_MS || '45000', 10);
 const HEADLESS = process.env.HEADLESS !== 'false';
@@ -62,8 +67,19 @@ export interface FetchErrorResult {
 
 export type FetchResult = FetchSuccessResult | FetchBlockedResult | FetchErrorResult;
 
-// Realistic User-Agent
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+// Realistic User-Agents (rotated randomly)
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15'
+];
+
+// Get random user agent
+const getRandomUserAgent = () => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
+// Random delay helper (makes behavior more human-like)
+const randomDelay = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 // Selectors for job data
 const SELECTORS = {
@@ -174,11 +190,18 @@ export async function fetchLinkedInJob(rawUrl: string, options: FetchOptions = {
 
     // Create context with realistic settings
     context = await browser.newContext({
-      userAgent: USER_AGENT,
-      viewport: { width: 1365, height: 768 },
+      userAgent: getRandomUserAgent(),
+      viewport: { width: 1366 + randomDelay(-100, 100), height: 768 + randomDelay(-50, 50) },
       locale: 'en-US',
-      timezoneId: 'America/New_York'
+      timezoneId: 'America/New_York',
+      deviceScaleFactor: 1,
+      hasTouch: false,
+      isMobile: false,
+      javaScriptEnabled: true
     });
+
+    // Add random initial delay to seem more human
+    await new Promise(resolve => setTimeout(resolve, randomDelay(500, 1500)));
 
     const page = await context.newPage();
 
@@ -349,8 +372,8 @@ async function extractJobData(page: Page, timeoutMs: number): Promise<{
   descriptionText: string;
   applyUrl: string | null;
 }> {
-  // Wait a bit for dynamic content
-  await page.waitForTimeout(1000);
+  // Wait a bit for dynamic content (randomized to seem more human)
+  await page.waitForTimeout(randomDelay(1500, 3000));
 
   // Try to click "Show more" button if present
   await tryClickShowMore(page);
