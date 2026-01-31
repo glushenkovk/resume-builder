@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__n8n-mcp__n8n_health_check",
+      "mcp__n8n-mcp__tools_documentation",
+      "mcp__n8n-mcp__search_nodes",
+      "mcp__n8n-mcp__get_node",
+      "mcp__n8n-mcp__n8n_create_workflow",
+      "mcp__n8n-mcp__n8n_list_workflows",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "mcp__n8n-mcp__n8n_test_workflow",
+      "Bash(docker ps:*)",
+      "Bash(docker inspect:*)",
+      "mcp__n8n-mcp__n8n_get_workflow",
+      "mcp__n8n-mcp__n8n_update_full_workflow",
+      "Read(//c/Users/Kons/ai_business_factory/**)",
+      "Bash(xcopy:*)",
+      "Bash(robocopy:*)",
+      "Bash(npx tsc)",
+      "Bash(node_modules.bintsc)",
+      "Bash(npm install)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: LinkedIn job fetcher with improved Show More handling\n\nFeatures:\n- Playwright-based LinkedIn job scraping\n- Improved \"Show more\" button clicking with multiple selectors\n- Scroll-to-view before clicking for reliability\n- Fallback button detection via page.evaluate\n- Clean description text \\(remove Show more/less remnants\\)\n- Concurrency and rate limiting support\n- Block detection \\(login, captcha, rate limit\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(gh auth:*)",
+      "Bash(where:*)",
+      "Bash(dir \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\")",
+      "Bash(dir \"C:\\\\Program Files \\(x86\\)\\\\GitHub CLI\\\\gh.exe\")",
+      "Bash(dir \"%LOCALAPPDATA%\\\\Programs\\\\GitHub CLI\\\\gh.exe\")",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo create resume-builder --private --source=. --remote=origin --push)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo create job-fetcher --private --source=. --remote=origin --push)",
+      "Bash(docker exec:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(findstr:*)",
+      "mcp__n8n-mcp__n8n_validate_workflow",
+      "mcp__n8n-mcp__n8n_update_partial_workflow",
+      "Bash(docker-compose restart:*)",
+      "Bash(git checkout:*)",
+      "Bash(git rebase:*)",
+      "Bash(GIT_EDITOR=true git rebase:*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\Kons\\ai_business_factory\\job-fetcher\\src",
+      "c:\\Users\\Kons\\ai_business_factory\\job-fetcher"
+    ]
+  }
+}

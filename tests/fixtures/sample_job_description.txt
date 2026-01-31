@@ -1,0 +1,44 @@
+Senior Software Engineer - Backend
+TechGiant Corp | San Francisco, CA | Full-time
+
+About the Role:
+We're looking for a Senior Software Engineer to join our Platform team. You'll be building scalable backend systems that power our next-generation products.
+
+Responsibilities:
+- Design and implement microservices using Python and Go
+- Build and maintain RESTful and GraphQL APIs
+- Work with databases (PostgreSQL, Redis, MongoDB)
+- Collaborate with frontend teams and product managers
+- Participate in on-call rotation
+- Mentor junior engineers
+
+Requirements:
+
+Must Have:
+- 5+ years of software engineering experience
+- Strong proficiency in Python
+- Experience with microservices architecture
+- Knowledge of SQL and NoSQL databases
+- Experience with AWS or similar cloud platforms
+- Bachelor's degree in Computer Science or equivalent
+
+Nice to Have:
+- Experience with Go programming language
+- Knowledge of Kubernetes and Docker
+- GraphQL experience
+- Experience with CI/CD pipelines
+- Contributions to open source projects
+
+Benefits:
+- Competitive salary: $180,000 - $220,000
+- Equity package
+- Health, dental, and vision insurance
+- 401(k) matching
+- Flexible work arrangements
+- Learning and development budget
+
+Our Culture:
+We value collaboration, innovation, and work-life balance. Our team is diverse and inclusive, and we're committed to building products that make a difference.
+
+To Apply:
+Submit your resume and cover letter. We review all applications and respond within 2 weeks.

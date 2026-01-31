@@ -1,0 +1,38 @@
+# Integration docker-compose - adds job-fetcher to n8n network
+# Use with: docker compose -f docker-compose.yml -f job-fetcher/docker-compose.integration.yml up -d
+version: '3.8'
+
+services:
+  job-fetcher:
+    build:
+      context: ./job-fetcher
+      dockerfile: Dockerfile
+    container_name: job-fetcher
+    # No external port mapping needed - accessed via internal network
+    environment:
+      - PORT=3000
+      - HEADLESS=true
+      - DEFAULT_TIMEOUT_MS=45000
+      - MAX_CONCURRENCY=2
+      - RATE_LIMIT_MAX=30
+      - RATE_LIMIT_WINDOW_MS=600000
+      - REQUEST_TIMEOUT_MS=120000
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - resume-network
+
+networks:
+  resume-network:
+    external: true

@@ -1,0 +1,45 @@
+JOHN DOE
+Software Engineer
+
+john.doe@email.com | +1 (555) 123-4567 | San Francisco, CA
+LinkedIn: linkedin.com/in/johndoe | GitHub: github.com/johndoe
+
+PROFESSIONAL SUMMARY
+Experienced software engineer with 5 years of experience building scalable web applications. Proficient in Python, JavaScript, and cloud technologies. Passionate about clean code and test-driven development.
+
+EXPERIENCE
+
+Senior Software Engineer | TechCorp Inc. | San Francisco, CA | Jan 2021 - Present
+- Led development of microservices architecture serving 1M+ daily users
+- Reduced API response time by 40% through optimization and caching
+- Mentored team of 4 junior developers
+- Implemented CI/CD pipelines using GitHub Actions
+
+Software Engineer | StartupXYZ | San Francisco, CA | Jun 2019 - Dec 2020
+- Built RESTful APIs using Python/Django and PostgreSQL
+- Developed React frontend components for customer dashboard
+- Collaborated with product team to define technical requirements
+- Achieved 90% test coverage on critical modules
+
+Junior Developer | WebAgency | Remote | Jan 2018 - May 2019
+- Created responsive websites using HTML, CSS, JavaScript
+- Maintained WordPress sites for 20+ clients
+- Participated in code reviews and agile ceremonies
+
+EDUCATION
+
+Bachelor of Science in Computer Science
+University of California, Berkeley | Graduated May 2018
+GPA: 3.7/4.0
+
+SKILLS
+
+Technical: Python, JavaScript, TypeScript, SQL, Git
+Frameworks: Django, React, Node.js, FastAPI
+Cloud: AWS (EC2, S3, Lambda), Docker, Kubernetes
+Tools: PostgreSQL, Redis, MongoDB, GitHub Actions
+Soft Skills: Team Leadership, Agile/Scrum, Technical Writing
+
+CERTIFICATIONS
+- AWS Certified Solutions Architect - Associate (2022)
+- Google Cloud Professional Developer (2021)

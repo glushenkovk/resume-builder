@@ -1,0 +1,30 @@
+# Environment and secrets
+.env
+.env.*
+*.env
+
+# n8n MCP config (contains API keys)
+.mcp.json
+
+# Data directories (personal files)
+data/input/
+data/output/
+
+# Node modules
+node_modules/
+job-fetcher/node_modules/
+
+# Build outputs
+job-fetcher/dist/
+
+# Execution logs
+exec*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+nul
+
+# IDE
+.vscode/
+.idea/
